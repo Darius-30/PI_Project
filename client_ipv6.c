@@ -7,28 +7,29 @@
 #include <errno.h>
 #include <unistd.h>
 
-
 int main(){
 	char *address = "www.he.net";
 	int status;
 	struct addrinfo hints;
 	struct addrinfo *res;
 	char host[250];
-	char *request = "GET / HTTP/1.1\r\nHost: www.he.net\r\nConnection: close\r\n\r\n";
+	char *request = "GET / HTTP/1.0\r\n\r\n";
 	int len = strlen(request);
 	int bytes_sent = 0;
 	int bytes_received = 0;
 	char *response = NULL;
 	size_t total_size = 0;
-	char buffer[4096];
+	char buffer[4];
+	size_t body_size = 0;
+	size_t header_size = 0;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_INET; //AF_INET6;
+	hints.ai_family = AF_INET; 
 	hints.ai_socktype = SOCK_STREAM;
 
 	printf("Obtinem adresa IPV6 a server-ului %s...\n", address);
-
-	if(getaddrinfo(address, "http", &hints, &res) != 0){
+	status = getaddrinfo(address, "http", &hints, &res);
+	if(status != 0){
 		printf("Error: %s", gai_strerror(status));
 		return 1;
 	}
@@ -52,8 +53,7 @@ int main(){
 
 	bytes_sent = send(sock, request, len, 0);
 	if(bytes_sent == -1){
-		fprintf(stderr, "Eroare la trimiterea datelor: %s\n",
-			strerror(errno));
+		fprintf(stderr, "Eroare la trimiterea datelor: %s\n", strerror(errno));
 		return 1;
 	}
 	printf("S-au trimis %d bytes catre server\n", bytes_sent);
@@ -63,6 +63,7 @@ int main(){
 		if(!new_resp){
 			printf("Eroarea la alocarea memoriei\n");
 			break;
+			return 1;
 		}
 		response = new_resp;
 		memcpy(response + total_size, buffer, bytes_received);
@@ -71,8 +72,7 @@ int main(){
 	}
 	
 	if(bytes_received == -1){
-		fprintf(stderr, "Eroare la primirea datelor: %s\n",
-			strerror(errno));
+		fprintf(stderr, "Eroare la primirea datelor: %s\n", strerror(errno));
 		return 1;
 	}
 
@@ -81,10 +81,16 @@ int main(){
 		fprintf(stderr, "Eroare la deschiderea fisierului: %s\n",strerror(errno));
 		return 1;
 	}
-	fwrite(response, 1, total_size, file);
-	printf("Raspunsul a fost salvat in fisierul index.html si contine %d bytes\n", total_size);
 
-	
+	char *html_body = strstr(response, "\r\n\r\n");
+	if(html_body != NULL){
+		html_body += 4;
+		header_size = html_body - response;
+		body_size = total_size - header_size;
+	}
+	fwrite(html_body, 1, total_size, file);
+	printf("Raspunsul a fost salvat in fisierul index.html si contine %d bytes\n", body_size);
+
 	free(response);
 	fclose(file);	
 	freeaddrinfo(res);

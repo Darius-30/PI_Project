@@ -15,7 +15,7 @@ int main(){
     socklen_t addr_size;
     struct addrinfo hints, *res;
     int sock;
-    char receive_buffer[1024];
+    char receive_buffer[256];
     int bytes_received;
 
     memset(&hints, 0, sizeof hints);
@@ -45,28 +45,35 @@ int main(){
     }
     printf("Serverul asculta pe portul %s...\n", PORT);
     addr_size = sizeof their_addr;
-    int new_fd = accept(sock, (struct sockaddr *)&their_addr, &addr_size);
-    if(new_fd == -1){
-        fprintf(stderr, "Eroare la accept: %s\n", strerror(errno));
-        return 1;
-    }
-    printf("S-a acceptat o conexiune noua!\n");
-
+    
     while(1){
-        bytes_received = recv(new_fd, receive_buffer, sizeof receive_buffer - 1, 0);
-        if (bytes_received > 0) {
-            receive_buffer[bytes_received] = '\0';
-            printf("Am primit de la client: %s\n", receive_buffer);
-        } else if (bytes_received == 0) {
-            printf("Clientul a închis conexiunea.\n");
-            break;
-        } else {
-            perror("Eroare la recv");
+        int new_fd = accept(sock, (struct sockaddr *)&their_addr, &addr_size);
+        if(new_fd == -1){
+            fprintf(stderr, "Eroare la accept: %s\n", strerror(errno));
+            continue;
         }
+        printf("S-a acceptat o conexiune noua de la adresa \n");
+        while(1){
+            bytes_received = recv(new_fd, receive_buffer, sizeof receive_buffer - 1, 0);
+            if (bytes_received > 0) {
+                receive_buffer[bytes_received] = '\0';
+                printf("Am primit de la client: %s\n", receive_buffer);
+                if(strcmp(receive_buffer, "07#") == 0){
+                    send(new_fd, "Comanda 07# primita cu succes!\n", 32, 0);
+                }
+            } else if (bytes_received == 0) {
+                printf("Clientul a închis conexiunea.\n");
+                break;
+            } else {
+                perror("Eroare la recv");
+            }
+        }
+        
+        close(new_fd);
+        printf("Conexiunea cu clientul a fost terminată.\n");
+        printf("---------------------------------------------------------------\n");
     }
 
-    close(new_fd);
-    close(sock);
     freeaddrinfo(res);
     return 0;
 }
