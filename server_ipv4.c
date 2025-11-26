@@ -6,13 +6,17 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #define PORT "22317"
 #define MAX_PENDING 5
+#define ADDRESS "www.he.net"
 
 int get_page(char *address, char **response, int *response_size);
 
 int main(){
+
 
     struct sockaddr_storage their_addr;
     socklen_t addr_size;
@@ -48,7 +52,7 @@ int main(){
     }
     printf("Serverul asculta pe portul %s...\n", PORT);
     addr_size = sizeof their_addr;
-    
+
     while(1){
         int new_fd = accept(sock, (struct sockaddr *)&their_addr, &addr_size);
         if(new_fd == -1){
@@ -64,7 +68,7 @@ int main(){
                 if(strcmp(receive_buffer, "07#") == 0){
                     char *response = NULL;
                     int response_size = 0;
-                    if(get_page("www.he.net", &response, &response_size) == 0){
+                    if(get_page(ADDRESS, &response, &response_size) == 0){
                         send(new_fd, response, response_size, 0);
                         free(response);
                     } else {
@@ -94,6 +98,12 @@ int main(){
 }
 
 int get_page(char *address, char **response, int *response_size){
+    
+    SSL_library_init();
+    
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+    SSL *ssl = SSL_new(ctx);
+
     int status;
     struct addrinfo hints;
     struct addrinfo *res;
@@ -113,7 +123,7 @@ int get_page(char *address, char **response, int *response_size){
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     printf("Obtinem adresa IPV6 a server-ului %s...\n", address);
-    status = getaddrinfo(address, "http", &hints, &res);
+    status = getaddrinfo(address, "https", &hints, &res);
     if(status != 0){
         printf("Error: %s", gai_strerror(status));
         return -1;
@@ -135,7 +145,16 @@ int get_page(char *address, char **response, int *response_size){
         return -1;
     }
     printf("Conexiunea a fost stabilita!\n");
-    bytes_sent = send(sock, request, len, 0);
+    SSL_set_fd(ssl, sock);
+
+    if(SSL_connect(ssl) == -1){
+        fprintf(stderr, "Eroare la SSL_connect: %s\n", ERR_error_string(SSL_get_error(ssl, -1), NULL));
+        close(sock);
+        freeaddrinfo(res);
+        return -1;
+    }
+    printf("Conexiunea SSL a fost stabilita cu succes!\n");
+    bytes_sent = SSL_write(ssl, request, len);
     if(bytes_sent == -1){
         fprintf(stderr, "Eroare la trimiterea datelor: %s\n", strerror(errno));
         close(sock);
@@ -143,7 +162,7 @@ int get_page(char *address, char **response, int *response_size){
         return -1;
     }
     printf("S-au trimis %d bytes catre server\n", bytes_sent);
-    while((bytes_received = recv(sock, buffer, sizeof buffer - 1, 0)) > 0){
+    while((bytes_received = SSL_read(ssl, buffer, sizeof buffer - 1)) > 0){
         char *new_resp = realloc(*response, total_size + bytes_received + 1);
         if(!new_resp){
             printf("Eroarea la alocarea memoriei\n");
@@ -170,7 +189,7 @@ int get_page(char *address, char **response, int *response_size){
 		html_body += 4;
 		header_size = html_body - *response;
 		body_size = total_size - header_size;
-        fwrite(html_body, 1, total_size, file);
+        fwrite(html_body, 1, body_size, file);
         fclose(file);
         printf("Pagina salvata in index.html\n");
     }
@@ -178,6 +197,8 @@ int get_page(char *address, char **response, int *response_size){
     *response_size = body_size;
     printf("S-au primit %zu bytes de la server\n", body_size);
     close(sock);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
     freeaddrinfo(res);
     return 0;
 }
