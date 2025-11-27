@@ -13,8 +13,6 @@
 #define MAX_PENDING 5
 #define ADDRESS "www.he.net"
 
-int get_page(char *address, char **response, int *response_size);
-
 int main(){
 
     struct sockaddr_storage their_addr;
