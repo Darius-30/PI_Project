@@ -57,37 +57,48 @@ int main(){
             continue;
         }
         printf("S-a acceptat o conexiune noua de la adresa \n");
-        while(1){
-            bytes_received = recv(new_fd, receive_buffer, sizeof receive_buffer - 1, 0);
-            if (bytes_received > 0) {
-                receive_buffer[bytes_received] = '\0';
-                printf("Am primit de la client: %s\n", receive_buffer);
-                if(strcmp(receive_buffer, "07#") == 0){
-                    char *response = NULL;
-                    int response_size = 0;
-                    if(get_page(ADDRESS, &response, &response_size) == 0){
-                        send(new_fd, response, response_size, 0);
-                        free(response);
-                    } else {
-                        char *error_msg = "Eroare la obtinerea paginii.\n";
-                        send(new_fd, error_msg, strlen(error_msg), 0);
-                    }
-                }
-                else{
-                    char *msg = "Comanda necunoscuta.\n";
-                    send(new_fd, msg, strlen(msg), 0);
-                }
-            } else if (bytes_received == 0) {
-                printf("Clientul a închis conexiunea.\n");
-                break;
-            } else {
-                perror("Eroare la recv");
-            }
-        }
         
-        close(new_fd);
-        printf("Conexiunea cu clientul a fost terminată.\n");
-        printf("---------------------------------------------------------------\n");
+        pid_t pid = fork();
+        if(pid == -1){
+            fprintf(stderr, "Eroare la fork: %s\n", strerror(errno));
+            close(new_fd);
+            continue;
+        }
+        if(pid == 0){
+            close(sock);
+            while(1){
+                bytes_received = recv(new_fd, receive_buffer, sizeof receive_buffer - 1, 0);
+                if (bytes_received > 0) {
+                    receive_buffer[bytes_received] = '\0';
+                    printf("Am primit de la client: %s\n", receive_buffer);
+                    if(strcmp(receive_buffer, "07#") == 0){
+                        char *response = NULL;
+                        int response_size = 0;
+                        if(get_page(ADDRESS, &response, &response_size) == 0){
+                            send(new_fd, response, response_size, 0);
+                            free(response);
+                        } else {
+                            char *error_msg = "Eroare la obtinerea paginii.\n";
+                            send(new_fd, error_msg, strlen(error_msg), 0);
+                        }
+                    }
+                    else{
+                        char *msg = "Comanda necunoscuta.\n";
+                        send(new_fd, msg, strlen(msg), 0);
+                    }
+                } else if (bytes_received == 0) {
+                    printf("Clientul a închis conexiunea.\n");
+                    break;
+                } else {
+                    perror("Eroare la recv");
+                }
+            }
+            
+            close(new_fd);
+            printf("Conexiunea cu clientul a fost terminată.\n");
+            printf("---------------------------------------------------------------\n");
+            exit(0);
+        }
     }
 
     freeaddrinfo(res);
