@@ -26,8 +26,17 @@ int main(){
     hints.ai_family = AF_INET; // Specificam ca dorim adrese IPV4
     hints.ai_socktype = SOCK_STREAM; // Specificam ca dorim socket de tip stream (TCP)
     hints.ai_flags = AI_PASSIVE; // Specificam ca dorim sa ascultam pe toate interfetele disponibile 
-
-    if(getaddrinfo(NULL, PORT, &hints, &res) != 0){
+    /**
+         * getnameinfo:
+         * - res->ai_addr: adresa socketului rezultată din rezolvarea numelui (struct sockaddr) care va fi convertită.
+         * - res->ai_addrlen: lungimea structurii res->ai_addr, necesară pentru a limita citirea corectă a memoriei.
+         * - host: bufferul unde va fi scrisă reprezentarea textuală (numerică) a adresei IP obținute.
+         * - sizeof host: dimensiunea bufferului host, pentru a preveni depășirile de memorie.
+         * - NULL: pointer pentru numele portului; NULL indică faptul că nu dorim să obținem această informație.
+         * - 0: lungimea bufferului destinat numelui portului, nefolosit deoarece cel anterior este NULL.
+         * - NI_NUMERICHOST: flag care specifică faptul că dorim adresa în formă numerică (fără rezolvare inversă DNS).
+         */
+    if(getaddrinfo(NULL, PORT, &hints, &res) != 0){ // Obtinem adresa pentru server
         fprintf(stderr, "Eroare la getaddrinfo: %s\n", gai_strerror(errno));
         return 1;
     }
@@ -56,11 +65,7 @@ int main(){
             fprintf(stderr, "Eroare la accept: %s\n", strerror(errno));
             continue;
         }
-        getnameinfo((struct sockaddr *)&their_addr, addr_size, 
-                    receive_buffer, sizeof receive_buffer, 
-                    NULL, 0, NI_NUMERICHOST);
-        printf("S-a acceptat o conexiune noua de la adresa %s\n", receive_buffer);
-        
+           
         pid_t pid = fork(); // Cream un proces copil pentru a gestiona conexiunea cu clientul
         if(pid == -1){ // Verificam daca fork a avut loc succes
             fprintf(stderr, "Eroare la fork: %s\n", strerror(errno));
@@ -69,6 +74,12 @@ int main(){
         }
         if(pid == 0){ // Procesul copil gestioneaza conexiunea cu clientul
             close(sock); // Inchidem socketul principal in procesul copil
+            char client_address[256];
+            getnameinfo((struct sockaddr *)&their_addr, addr_size, 
+                    client_address, sizeof client_address, 
+                    NULL, 0, NI_NUMERICHOST);
+            printf("S-a acceptat o conexiune noua de la adresa %s\n", client_address);
+     
             while(1){ // Bucla pentru a primi si procesa date de la client
                 bytes_received = recv(new_fd, receive_buffer, sizeof receive_buffer - 1, 0); // Primim date de la client
                 if (bytes_received > 0) { // Verificam daca recv a avut succes
@@ -90,10 +101,11 @@ int main(){
                         send(new_fd, msg, strlen(msg), 0); // Trimitem mesaj de eroare la client daca comanda este necunoscuta
                     }
                 } else if (bytes_received == 0) {
-                    printf("Clientul a închis conexiunea.\n"); // Clientul a închis conexiunea
+                    printf("Clientul %s a închis conexiunea.\n", client_address); // Clientul a închis conexiunea
+                    close(new_fd); // inchidem socketul conexiunii
                     break;
                 } else {
-                    perror("Eroare la recv"); 
+                    fprintf(stderr, "Eroare la recv: %s\n", strerror(errno));
                 }
             }
             
