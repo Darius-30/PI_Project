@@ -56,7 +56,10 @@ int main(){
             fprintf(stderr, "Eroare la accept: %s\n", strerror(errno));
             continue;
         }
-        printf("S-a acceptat o conexiune noua de la adresa \n");
+        getnameinfo((struct sockaddr *)&their_addr, addr_size, 
+                    receive_buffer, sizeof receive_buffer, 
+                    NULL, 0, NI_NUMERICHOST);
+        printf("S-a acceptat o conexiune noua de la adresa %s\n", receive_buffer);
         
         pid_t pid = fork(); // Cream un proces copil pentru a gestiona conexiunea cu clientul
         if(pid == -1){ // Verificam daca fork a avut loc succes
@@ -90,7 +93,7 @@ int main(){
                     printf("Clientul a închis conexiunea.\n"); // Clientul a închis conexiunea
                     break;
                 } else {
-                    perror("Eroare la recv");
+                    perror("Eroare la recv"); 
                 }
             }
             
